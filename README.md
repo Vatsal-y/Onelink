@@ -1,6 +1,7 @@
 # SnapLink — Serverless Link Management & Analytics Platform
 
-> A fully serverless, production-grade URL shortening service built on **Spring Boot 3** and **AWS**.
+> SnapLink is a serverless Link Management & Analytics Platform built with Spring Boot, React, and AWS cloud services. It enables users to create and manage branded short links, generate QR codes, monitor click activity, and gain real-time insights through an asynchronous analytics pipeline powered by Redis, DynamoDB, SQS, and S3. Designed with a cloud-native architecture, SnapLink emphasizes scalability, low-latency redirects, and production-grade observability.
+
 
 ![Java](https://img.shields.io/badge/Java-21-orange?style=flat-square)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-6DB33F?style=flat-square)
