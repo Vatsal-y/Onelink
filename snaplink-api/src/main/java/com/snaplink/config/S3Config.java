@@ -3,6 +3,8 @@ package com.snaplink.config;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
@@ -29,6 +31,9 @@ public class S3Config {
         if (endpoint != null && !endpoint.isBlank()) {
             builder.endpointOverride(URI.create(endpoint));
             builder.forcePathStyle(true); // Required for LocalStack
+            builder.credentialsProvider(StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create("test", "test")
+            ));
         }
 
         return builder.build();
@@ -41,6 +46,9 @@ public class S3Config {
 
         if (endpoint != null && !endpoint.isBlank()) {
             builder.endpointOverride(URI.create(endpoint));
+            builder.credentialsProvider(StaticCredentialsProvider.create(
+                    AwsBasicCredentials.create("test", "test")
+            ));
         }
 
         return builder.build();

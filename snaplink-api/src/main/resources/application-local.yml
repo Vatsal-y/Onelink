@@ -39,3 +39,13 @@ snaplink:
 
 # Disable OAuth2 resource server in local dev
 spring.security.oauth2.resourceserver.jwt.issuer-uri:
+
+# Configure Spring Cloud AWS properties for local environment to prevent IAM lookup failures
+spring.cloud.aws:
+  region:
+    static: us-east-1
+  credentials:
+    access-key: test
+    secret-key: test
+  sqs:
+    endpoint: http://localhost:4566
