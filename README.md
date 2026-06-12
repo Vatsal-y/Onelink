@@ -1,4 +1,4 @@
-# SnapLink — Serverless URL Shortener
+# SnapLink — Serverless Link Management & Analytics Platform
 
 > A fully serverless, production-grade URL shortening service built on **Spring Boot 3** and **AWS**.
 
