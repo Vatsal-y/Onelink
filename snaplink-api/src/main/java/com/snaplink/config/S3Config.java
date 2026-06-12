@@ -49,6 +49,9 @@ public class S3Config {
             builder.credentialsProvider(StaticCredentialsProvider.create(
                     AwsBasicCredentials.create("test", "test")
             ));
+            builder.serviceConfiguration(software.amazon.awssdk.services.s3.S3Configuration.builder()
+                    .pathStyleAccessEnabled(true)
+                    .build());
         }
 
         return builder.build();
