@@ -1,0 +1,37 @@
+# ======================================================
+# SnapLink — Local Development Services
+# ======================================================
+# Usage: docker-compose up -d
+# ======================================================
+
+services:
+  # ---- DynamoDB Local ----
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: snaplink-dynamodb
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -inMemory"
+    restart: unless-stopped
+
+  # ---- Redis ----
+  redis:
+    image: redis:7-alpine
+    container_name: snaplink-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # ---- LocalStack (SQS, S3, Cognito) ----
+  localstack:
+    image: localstack/localstack:latest
+    container_name: snaplink-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=sqs,s3,cognito-idp
+      - DEFAULT_REGION=us-east-1
+      - EAGER_SERVICE_LOADING=1
+    volumes:
+      - "./infrastructure/scripts:/etc/localstack/init/ready.d"
+    restart: unless-stopped

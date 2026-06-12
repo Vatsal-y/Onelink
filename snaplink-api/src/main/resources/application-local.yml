@@ -1,0 +1,41 @@
+# ======================================================
+# SnapLink — Local Development Profile
+# ======================================================
+# Activate with: --spring.profiles.active=local
+# or SPRING_PROFILES_ACTIVE=local
+#
+# Requires: docker-compose up -d
+# ======================================================
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+aws:
+  region: us-east-1
+
+  dynamodb:
+    endpoint: http://localhost:8000
+
+  sqs:
+    endpoint: http://localhost:4566
+
+  s3:
+    endpoint: http://localhost:4566
+
+  cognito:
+    endpoint: http://localhost:4566
+    user-pool-id: local_user_pool
+    client-id: local_client_id
+
+snaplink:
+  base-url: http://localhost:8080
+  security:
+    enabled: false
+  cors:
+    allowed-origins: http://localhost:5173
+
+# Disable OAuth2 resource server in local dev
+spring.security.oauth2.resourceserver.jwt.issuer-uri:

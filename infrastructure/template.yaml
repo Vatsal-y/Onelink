@@ -1,0 +1,302 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Description: >
+  SnapLink — Serverless URL Shortener
+  Spring Boot 3 on AWS Lambda with DynamoDB, SQS, ElastiCache, Cognito, and S3.
+
+# ======================================================
+# Parameters
+# ======================================================
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues: [prod, staging]
+  
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC for ElastiCache and Lambda
+
+  SubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Subnets for Lambda (must have NAT Gateway for internet access)
+
+# ======================================================
+# Globals
+# ======================================================
+Globals:
+  Function:
+    Runtime: java21
+    Architectures: [arm64]
+    MemorySize: 1024
+    Timeout: 30
+    Environment:
+      Variables:
+        SPRING_PROFILES_ACTIVE: aws
+        AWS_REGION: !Ref AWS::Region
+        COGNITO_USER_POOL_ID: !Ref SnapLinkUserPool
+        COGNITO_CLIENT_ID: !Ref SnapLinkUserPoolClient
+        S3_BUCKET: !Ref QrCodeBucket
+        REDIS_HOST: !GetAtt RedisCluster.RedisEndpoint.Address
+        BASE_URL: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+        DASHBOARD_URL: "*"
+
+# ======================================================
+# Resources
+# ======================================================
+Resources:
+
+  # ---- Lambda Function (Spring Boot) ----
+  SnapLinkFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ../snaplink-api
+      Handler: com.snaplink.handler.StreamLambdaHandler::handleRequest
+      SnapStart:
+        ApplyOn: PublishedVersions
+      VpcConfig:
+        SecurityGroupIds: [!Ref LambdaSecurityGroup]
+        SubnetIds: !Ref SubnetIds
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LinksTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AnalyticsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ClickEventsQueue.QueueName
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ClickEventsQueue.QueueName
+        - S3CrudPolicy:
+            BucketName: !Ref QrCodeBucket
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:AdminCreateUser
+                - cognito-idp:AdminConfirmSignUp
+                - cognito-idp:InitiateAuth
+                - cognito-idp:SignUp
+              Resource: !GetAtt SnapLinkUserPool.Arn
+      Events:
+        ApiProxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+        ApiRoot:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+
+  # ---- DynamoDB: Links Table ----
+  LinksTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: snaplink-links
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: shortCode
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: shortCode
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: userId-createdAt-index
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: expiresAt
+        Enabled: true
+
+  # ---- DynamoDB: Analytics Table ----
+  AnalyticsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    Properties:
+      TableName: snaplink-analytics
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: shortCodeDate
+          AttributeType: S
+        - AttributeName: clickId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: shortCodeDate
+          KeyType: HASH
+        - AttributeName: clickId
+          KeyType: RANGE
+
+  # ---- SQS: Click Events Queue ----
+  ClickEventsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: snaplink-click-events
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 1209600  # 14 days
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ClickEventsDLQ.Arn
+        maxReceiveCount: 3
+
+  ClickEventsDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: snaplink-click-events-dlq
+      MessageRetentionPeriod: 1209600
+
+  # ---- S3: QR Code Bucket ----
+  QrCodeBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "snaplink-qrcodes-${AWS::AccountId}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["*"]
+            AllowedMethods: [GET]
+            AllowedHeaders: ["*"]
+            MaxAge: 3600
+
+  # ---- Cognito: User Pool ----
+  SnapLinkUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: snaplink-users
+      AutoVerifiedAttributes: [email]
+      UsernameAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: true
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+
+  SnapLinkUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: snaplink-web
+      UserPoolId: !Ref SnapLinkUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AccessTokenValidity: 1     # 1 hour
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30   # 30 days
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+
+  # ---- ElastiCache: Redis ----
+  RedisSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: Subnets for SnapLink Redis
+      SubnetGroupName: snaplink-redis-subnets
+      SubnetIds: !Ref SubnetIds
+
+  RedisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Lambda to access Redis
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 6379
+          ToPort: 6379
+          SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for SnapLink Lambda
+      VpcId: !Ref VpcId
+
+  RedisCluster:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      ClusterName: snaplink-redis
+      Engine: redis
+      CacheNodeType: cache.t3.micro
+      NumCacheNodes: 1
+      CacheSubnetGroupName: !Ref RedisSubnetGroup
+      VpcSecurityGroupIds: [!Ref RedisSecurityGroup]
+
+  # ---- CloudWatch: Error Rate Alarm ----
+  ErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: snaplink-error-rate
+      AlarmDescription: Alarm when Lambda error rate exceeds 1% over 5 minutes
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SnapLinkFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+
+  # ---- CloudWatch: DLQ Depth Alarm ----
+  DlqDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: snaplink-dlq-depth
+      AlarmDescription: Alarm when DLQ has messages (analytics processing failures)
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ClickEventsDLQ.QueueName
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+
+# ======================================================
+# Outputs
+# ======================================================
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod"
+
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref SnapLinkUserPool
+
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref SnapLinkUserPoolClient
+
+  QrCodeBucketName:
+    Description: S3 bucket for QR code images
+    Value: !Ref QrCodeBucket
+
+  RedisEndpoint:
+    Description: ElastiCache Redis endpoint
+    Value: !GetAtt RedisCluster.RedisEndpoint.Address

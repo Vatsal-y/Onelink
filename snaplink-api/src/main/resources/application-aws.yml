@@ -1,0 +1,55 @@
+# ======================================================
+# SnapLink — AWS Production Profile
+# ======================================================
+# Activate with: --spring.profiles.active=aws
+# All endpoints use default AWS SDK credential chain.
+# ======================================================
+
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:snaplink-redis.xxxxx.cache.amazonaws.com}
+      port: 6379
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: https://cognito-idp.${AWS_REGION:us-east-1}.amazonaws.com/${COGNITO_USER_POOL_ID}
+          jwk-set-uri: https://cognito-idp.${AWS_REGION:us-east-1}.amazonaws.com/${COGNITO_USER_POOL_ID}/.well-known/jwks.json
+
+aws:
+  region: ${AWS_REGION:us-east-1}
+
+  dynamodb:
+    endpoint: ""
+    tables:
+      links: snaplink-links
+      analytics: snaplink-analytics
+
+  sqs:
+    endpoint: ""
+    queue-name: snaplink-click-events
+
+  s3:
+    endpoint: ""
+    bucket: ${S3_BUCKET:snaplink-qrcodes}
+
+  cognito:
+    endpoint: ""
+    user-pool-id: ${COGNITO_USER_POOL_ID}
+    client-id: ${COGNITO_CLIENT_ID}
+
+snaplink:
+  base-url: ${BASE_URL:https://snpl.ink}
+  security:
+    enabled: true
+  cors:
+    allowed-origins: ${DASHBOARD_URL:https://app.snaplink.io}
+
+logging:
+  level:
+    com.snaplink: INFO
+    software.amazon.awssdk: WARN
+  pattern:
+    console: '{"time":"%d","level":"%p","logger":"%logger","msg":"%msg"}%n'

@@ -1,0 +1,67 @@
+# ======================================================
+# SnapLink — Main Application Configuration
+# ======================================================
+
+spring:
+  application:
+    name: snaplink-api
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+  # Redis defaults (overridden per profile)
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+server:
+  port: 8080
+
+# ======================================================
+# AWS Configuration
+# ======================================================
+aws:
+  region: us-east-1
+
+  dynamodb:
+    endpoint: ""
+    tables:
+      links: snaplink-links
+      analytics: snaplink-analytics
+
+  sqs:
+    endpoint: ""
+    queue-name: snaplink-click-events
+
+  s3:
+    endpoint: ""
+    bucket: snaplink-qrcodes
+
+  cognito:
+    endpoint: ""
+    user-pool-id: ""
+    client-id: ""
+
+# ======================================================
+# SnapLink Custom Properties
+# ======================================================
+snaplink:
+  base-url: http://localhost:8080
+  security:
+    enabled: false   # Set to true in production (with Cognito)
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:3000
+
+# ======================================================
+# Logging
+# ======================================================
+logging:
+  level:
+    com.snaplink: DEBUG
+    software.amazon.awssdk: WARN
+    io.awspring: WARN
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

@@ -94,8 +94,6 @@ public class UrlController {
      */
     @GetMapping("/links/{code}/qr")
     public ResponseEntity<Map<String, String>> getQrCode(@PathVariable("code") String code) {
-        LinkEntity link = new com.snaplink.service.RedirectService(null, null).getLinkEntity(code);
-        // We'll inject redirectService properly — simplified for now
         String qrUrl = qrCodeService.getPresignedUrl("qr/" + code + ".png");
         return ResponseEntity.ok(Map.of("shortCode", code, "qrCodeUrl", qrUrl != null ? qrUrl : ""));
     }
