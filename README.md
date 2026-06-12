@@ -72,6 +72,35 @@ graph TD
     Consumer -->|6. Write click details| DynamoAnalytics
 ```
 
+## System Design
+
+<p align="center">
+  <img src="system-design.jpg" alt="SnapLink System Design" width="100%">
+</p>
+
+This diagram illustrates SnapLink's cache-aside redirect architecture and asynchronous analytics processing pipeline.
+
+### Redirect Flow
+1. User requests `GET /{shortCode}`
+2. Spring Boot Redirect Service checks Redis cache
+3. Cache HIT → return original URL immediately
+4. Cache MISS → fetch from DynamoDB and update Redis
+5. User is redirected to the destination URL
+
+### Analytics Flow
+1. Redirect service publishes click events asynchronously
+2. Events are pushed to AWS SQS
+3. `ClickEventConsumer` processes events
+4. Analytics are stored in DynamoDB
+5. Dashboard visualizes click metrics
+
+### Key Design Decisions
+- Cache-aside pattern using Redis
+- DynamoDB as source of truth
+- Asynchronous analytics via SQS
+- Redirect latency optimized through caching
+- Analytics processing isolated from redirect path
+
 ## Features
 
 | Feature | Description |
