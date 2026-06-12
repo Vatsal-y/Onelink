@@ -40,9 +40,9 @@ public class CacheService {
             String key = KEY_PREFIX + shortCode;
             String value = redisTemplate.opsForValue().get(key);
             if (value != null) {
-                log.debug("Cache HIT: {}", shortCode);
+                log.info("Redis Cache HIT: {} -> {}", shortCode, value);
             } else {
-                log.debug("Cache MISS: {}", shortCode);
+                log.info("Redis Cache MISS: {}", shortCode);
             }
             return value;
         } catch (Exception e) {
@@ -58,7 +58,7 @@ public class CacheService {
         try {
             String key = KEY_PREFIX + shortCode;
             redisTemplate.opsForValue().set(key, longUrl, CACHE_TTL_HOURS, TimeUnit.HOURS);
-            log.debug("Cached: {} → {}", shortCode, longUrl);
+            log.info("Redis Cache PUT: {} -> {}", shortCode, longUrl);
         } catch (Exception e) {
             log.warn("Redis put failed for {}: {}", shortCode, e.getMessage());
             // Non-fatal — the next request will miss cache and fetch from DynamoDB

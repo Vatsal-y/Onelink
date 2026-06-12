@@ -17,6 +17,9 @@ import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 
+import jakarta.annotation.PostConstruct;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Duration;
@@ -47,6 +50,31 @@ public class QrCodeService {
     public QrCodeService(S3Client s3Client, S3Presigner s3Presigner) {
         this.s3Client = s3Client;
         this.s3Presigner = s3Presigner;
+    }
+
+    @PostConstruct
+    public void initBucket() {
+        try {
+            s3Client.headBucket(b -> b.bucket(bucketName));
+            log.info("S3 bucket '{}' already exists.", bucketName);
+        } catch (NoSuchBucketException e) {
+            log.info("S3 bucket '{}' does not exist. Creating it...", bucketName);
+            s3Client.createBucket(b -> b.bucket(bucketName));
+            log.info("S3 bucket '{}' created successfully.", bucketName);
+        } catch (Exception e) {
+            // Some mock S3 endpoints return a generic error or different code for missing bucket
+            if (e.getMessage() != null && (e.getMessage().contains("404") || e.getMessage().contains("NoSuchBucket"))) {
+                try {
+                    log.info("S3 bucket '{}' not found (caught general 404). Creating it...", bucketName);
+                    s3Client.createBucket(b -> b.bucket(bucketName));
+                    log.info("S3 bucket '{}' created successfully.", bucketName);
+                } catch (Exception ex) {
+                    log.warn("Could not create S3 bucket '{}': {}", bucketName, ex.getMessage());
+                }
+            } else {
+                log.warn("Could not verify or create S3 bucket '{}': {}", bucketName, e.getMessage());
+            }
+        }
     }
 
     /**

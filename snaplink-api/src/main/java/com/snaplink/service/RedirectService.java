@@ -46,12 +46,11 @@ public class RedirectService {
         // 1. Try cache first
         String cachedUrl = cacheService.get(shortCode);
         if (cachedUrl != null) {
-            // Still need to check expiry from DynamoDB for expired links
-            // that haven't been evicted yet. For performance, we skip this
-            // check on cache hits — expired links are rare and DynamoDB TTL
-            // will eventually clean them up (within ~48h).
+            log.info("Resolved {} -> {} (Cache HIT 🚀)", shortCode, cachedUrl);
             return cachedUrl;
         }
+
+        log.info("Cache MISS for code: {} - fetching from DynamoDB...", shortCode);
 
         // 2. Cache miss — fetch from DynamoDB
         LinkEntity link = linkRepository.findByShortCode(shortCode);
@@ -67,7 +66,7 @@ public class RedirectService {
         // 4. Populate cache
         cacheService.put(shortCode, link.getLongUrl());
 
-        log.info("Resolved {} → {} (cache miss)", shortCode, link.getLongUrl());
+        log.info("Resolved {} -> {} (Database fetch + Cache updated 💾)", shortCode, link.getLongUrl());
         return link.getLongUrl();
     }
 

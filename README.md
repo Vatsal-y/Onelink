@@ -11,32 +11,65 @@
 
 ## Architecture
 
-```
-┌─────────────────────┐     ┌─────────────────────┐
-│   React Dashboard   │     │  Short Link Click    │
-│   (Vite + S3/CDN)   │     │  (Browser/App)       │
-└────────┬────────────┘     └────────┬─────────────┘
-         │ API + JWT                 │ GET /{code}
-         ▼                           ▼
-┌─────────────────────────────────────────────────┐
-│              AWS API Gateway                     │
-│              + Cognito Authorizer                │
-└────────────────────┬────────────────────────────┘
-                     │ Proxy
-                     ▼
-┌─────────────────────────────────────────────────┐
-│         Spring Boot Lambda Handler               │
-│         (SnapStart + ARM64)                      │
-├──────────┬──────────┬──────────┬────────────────┤
-│          │          │          │                  │
-▼          ▼          ▼          ▼                  ▼
-DynamoDB   Redis      SQS       S3            Cognito
-(links +   (cache-    (click    (QR code      (JWT
- analytics) aside)    events)   PNGs)         auth)
-                        │
-                        ▼
-                 ClickEvent Consumer
-                 (Analytics Lambda)
+```mermaid
+graph TD
+    classDef client fill:#3b82f6,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef gate fill:#eab308,stroke:#ca8a04,stroke-width:2px,color:#000;
+    classDef compute fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff;
+    classDef store fill:#6366f1,stroke:#4f46e5,stroke-width:2px,color:#fff;
+    classDef queue fill:#f97316,stroke:#ea580c,stroke-width:2px,color:#fff;
+
+    subgraph Client ["Clients & Entry Points"]
+        Dash["React SPA (Vite Dashboard)"]:::client
+        Clicker["Link User (Browser click/app)"]:::client
+    end
+
+    subgraph Gateway ["API Routing & Security"]
+        APIGW["AWS API Gateway"]:::gate
+        CognitoAuth["AWS Cognito (JWT Verification)"]:::gate
+    end
+
+    subgraph SpringLambda ["AWS Lambda Runtime (Spring Boot)"]
+        Handler["Spring Boot Web Handler (SnapStart)"]:::compute
+        Consumer["ClickEvent Consumer (SQS Listener)"]:::compute
+    end
+
+    subgraph Storage ["Databases & Object Storage"]
+        Redis["ElastiCache Redis (Cache-Aside: Redirects)"]:::store
+        DynamoLinks["DynamoDB (links table)"]:::store
+        DynamoAnalytics["DynamoDB (analytics table)"]:::store
+        S3["Amazon S3 (QR code bucket)"]:::store
+    end
+
+    subgraph Queuing ["Message Pipeline"]
+        SQS["AWS SQS (click-events queue)"]:::queue
+    end
+
+    %% Auth Flow
+    Dash -->|1. Authenticate / Register| APIGW
+    APIGW -.->|Verify JWT| CognitoAuth
+    CognitoAuth -.->|Token valid| APIGW
+
+    %% Dashboard Flow
+    Dash -->|2. Create / Manage Link / Fetch Analytics| APIGW
+    APIGW -->|Proxy HTTP Request| Handler
+    Handler -->|Create QR Code| S3
+    Handler -->|Write Link metadata| DynamoLinks
+    Handler -->|Read Daily Analytics| DynamoAnalytics
+
+    %% Redirect Flow
+    Clicker -->|3. GET /{shortCode}| APIGW
+    APIGW -->|Proxy HTTP Request| Handler
+    Handler -->|3a. Read cache| Redis
+    Redis -.->|Cache HIT: Return long URL| Handler
+    Redis -.->|Cache MISS| Handler
+    Handler -->|3b. Query Link| DynamoLinks
+    Handler -->|3c. Update cache| Redis
+
+    %% Async Analytics Flow
+    Handler -->|4. Push click event (async)| SQS
+    SQS -->|5. SQS Poller message trigger| Consumer
+    Consumer -->|6. Write click details| DynamoAnalytics
 ```
 
 ## Features
