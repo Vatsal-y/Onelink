@@ -28,6 +28,9 @@ public class AuthService {
     @Value("${aws.cognito.client-id:}")
     private String clientId;
 
+    @Value("${snaplink.security.enabled:true}")
+    private boolean securityEnabled;
+
     public AuthService(CognitoIdentityProviderClient cognitoClient) {
         this.cognitoClient = cognitoClient;
     }
@@ -39,6 +42,10 @@ public class AuthService {
      * @param password the user's password
      */
     public void register(String email, String password) {
+        if (!securityEnabled) {
+            log.info("[MOCK] Local mock user registration: {}", email);
+            return;
+        }
         try {
             SignUpRequest request = SignUpRequest.builder()
                     .clientId(clientId)
@@ -74,6 +81,15 @@ public class AuthService {
      * @return authentication result containing tokens
      */
     public AuthenticationResultType login(String email, String password) {
+        if (!securityEnabled) {
+            log.info("[MOCK] Local mock login for: {}", email);
+            return AuthenticationResultType.builder()
+                    .idToken("mock-id-token")
+                    .accessToken("mock-access-token")
+                    .refreshToken("mock-refresh-token")
+                    .expiresIn(3600)
+                    .build();
+        }
         try {
             InitiateAuthRequest request = InitiateAuthRequest.builder()
                     .authFlow(AuthFlowType.USER_PASSWORD_AUTH)

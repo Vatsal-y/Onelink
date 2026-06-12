@@ -22,14 +22,14 @@ services:
       - "6379:6379"
     restart: unless-stopped
 
-  # ---- LocalStack (SQS, S3, Cognito) ----
+  # ---- LocalStack (SQS, S3) ----
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:3.8.0
     container_name: snaplink-localstack
     ports:
       - "4566:4566"
     environment:
-      - SERVICES=sqs,s3,cognito-idp
+      - SERVICES=sqs,s3
       - DEFAULT_REGION=us-east-1
       - EAGER_SERVICE_LOADING=1
     volumes:
